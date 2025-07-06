@@ -1,4 +1,4 @@
-# Rag Intern Demo
+# Semantic Chunking for Multi-format Documents
 
 ## Getting started
 
