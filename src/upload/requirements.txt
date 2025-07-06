@@ -1,0 +1,8 @@
+asgi_correlation_id==4.2.0
+fastapi==0.109.1
+pydantic==2.8.2
+pydantic-settings==2.9.1
+python-dotenv==1.0.1
+structlog==22.3.0
+tqdm==4.67.1
+uvicorn[standard]==0.18.3
