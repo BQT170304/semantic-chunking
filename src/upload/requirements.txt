@@ -6,3 +6,4 @@ python-dotenv==1.0.1
 structlog==22.3.0
 tqdm==4.67.1
 uvicorn[standard]==0.18.3
+boto3==1.28
