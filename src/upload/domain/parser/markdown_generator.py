@@ -41,7 +41,7 @@ class ClaudeMarkdownGenerator:
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": 8192,
+            "max_tokens": 20000,
             "temperature": 0.4
         }
 
