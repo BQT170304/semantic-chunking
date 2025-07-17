@@ -11,28 +11,27 @@ from pydantic import BaseModel
 
 class EmbedderInput(BaseModel):
     """Input data for the embedding process."""
-    chunk: str
+    chunks: List[ChunkData]
     metadata: dict
 
 
 class EmbedderOutput(BaseModel):
     """Output data from the embedding process."""
-    id: Optional[str] = None
     index_name: Optional[str] = None
-    embedding: Optional[List[float]] = None
+    num_embeddings: Optional[int] = 0
 
 
 class ChunkData(BaseModel):
     """Data model for chunk processing."""
     id: str
     content: str
-    filename: str
-    position: int
-    tokens: int
     section_title: str
-    type: str
-    content_json: dict
-    heading_level: int
+    filename: str
+    position: Optional[int] = 0
+    tokens: Optional[int] = None
+    type: Optional[str] = None
+    content_json: Optional[List[Dict[str, str]]] = None
+    heading_level: Optional[int] = None
 
 
 class BaseEmbedderService(ABC):
@@ -41,11 +40,6 @@ class BaseEmbedderService(ABC):
     @abstractmethod
     def process(self, input_data: EmbedderInput) -> EmbedderOutput:
         """Generate embeddings for the input text."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def process_chunks(self, chunks: List[ChunkData]) -> bool:
-        """Process multiple chunks with embeddings and storage."""
         raise NotImplementedError()
 
 
