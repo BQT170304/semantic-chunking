@@ -1,16 +1,38 @@
-# Using a slim version for a smaller base image
-FROM python:3.11-slim-bullseye
+FROM python:3.11-slim
 
-RUN apt-get update \
-    && apt-get install libmagic1 swig wget -y \
+# Install system dependencies for OpenCV, Tesseract, and other libraries
+RUN apt-get update && apt-get install -y \
+    # OpenCV dependencies
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    # Tesseract OCR
+    tesseract-ocr \
+    tesseract-ocr-vie \
+    # PDF processing
+    poppler-utils \
+    # General utilities
+    gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
+# Set working directory
 WORKDIR /app
 
-COPY ./requirements.txt .
+# Copy requirements first for better caching
+COPY requirements.txt .
 
-# Upgrade pip
-RUN pip install --upgrade pip
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Increase timeout to wait for the new installation
-RUN pip install --no-cache-dir -r requirements.txt --timeout 200
+# Copy source code
+COPY . .
+
+# Set Python path to include both /app and /app/src
+ENV PYTHONPATH="/app:/app/src"
+
+# Expose port
+EXPOSE 8000
