@@ -21,6 +21,8 @@ class ChatApplication:
             None,
             self.rag.process,
             chat_request.message,
+            getattr(chat_request, 'chat_history', None),
+            getattr(chat_request, 'documents', None),
         )
 
         return ChatResponse(

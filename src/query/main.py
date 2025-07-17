@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(
-    title='Query (Ask) Service',
+    title='Query (Chat) Service',
     version='1.0.0',
     lifespan=lifespan,
 )

@@ -30,13 +30,46 @@ class OpenSearchRetriever:
             if not query.strip():
                 return []
 
-            docs = self.vectorstore.similarity_search(
-                query,
-                k=k,
-                search_kwargs=search_kwargs or {},
-                vector_field='embedding_vector',
-                text_field='content',
-            )
+            search_kwargs = search_kwargs or {}
+            hybrid = search_kwargs.pop('hybrid', False)
+            filters = search_kwargs.pop('filters', None)
+
+            if hybrid:
+                # Hybrid search: combine semantic and keyword search
+                docs_semantic = self.vectorstore.similarity_search(
+                    query,
+                    k=k,
+                    search_kwargs=search_kwargs,
+                    vector_field='embedding_vector',
+                    text_field='content',
+                )
+                docs_keyword = self.vectorstore.similarity_search(
+                    query,
+                    k=k,
+                    search_kwargs={**search_kwargs, 'use_keyword': True},
+                    vector_field='embedding_vector',
+                    text_field='content',
+                )
+                docs = docs_semantic + [doc for doc in docs_keyword if doc not in docs_semantic]
+                docs = docs[:k]
+            else:
+                docs = self.vectorstore.similarity_search(
+                    query,
+                    k=k,
+                    search_kwargs=search_kwargs,
+                    vector_field='embedding_vector',
+                    text_field='content',
+                )
+
+            # Apply field filters if provided
+            if filters:
+                filtered_docs = []
+                for doc in docs:
+                    meta = getattr(doc, 'metadata', {})
+                    if all(meta.get(f) == v for f, v in filters.items()):
+                        filtered_docs.append(doc)
+                docs = filtered_docs
+
             return docs
         except Exception as e:
             logger.error(f'Error retrieving documents: {str(e)}')
