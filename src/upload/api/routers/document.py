@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import List
 
+from application.upload import UploadDocumentApplication
+from application.upload import UploadDocumentInput
 from fastapi import APIRouter
+from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import UploadFile
@@ -12,11 +15,21 @@ router = APIRouter(tags=['documents'])
 settings = Settings()
 
 
+def get_upload_application(request: Request) -> UploadDocumentApplication:
+    """Dependency to get the upload application instance."""
+    return UploadDocumentApplication(
+        settings=None,
+        parser=request.app.state.parser,
+        chunker=request.app.state.chunker,
+        embedder=request.app.state.embedder,
+    )
+
+
 @router.post('/upload')
 def upload_documents(
-    request: Request,
     files: List[UploadFile],
-):  # Removed application dependency
+    application: UploadDocumentApplication = Depends(get_upload_application),
+):
     """Upload and process multiple documents.
 
     This endpoint accepts multiple file uploads and processes them through
@@ -28,16 +41,58 @@ def upload_documents(
         application (UploadDocumentApplication): Injected upload application instance
 
     Returns:
-        DocumentApplicationOutput: Processing results for all uploaded files
+        dict: Processing results for all uploaded files
     """
-    try:
-        request_data = {
-            'method': 'POST',
-            'files': [file.filename for file in files],
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f'Error processing files: {str(e)}')
-    return request_data
+    if not files:
+        raise HTTPException(status_code=400, detail='No files provided')
+
+    results = []
+
+    for file in files:
+        try:
+            # Reset file pointer to beginning
+            file.file.seek(0)
+
+            # Process each file through the application
+            upload_input = UploadDocumentInput(file=file)
+            result = application.upload_document(upload_input)
+
+            results.append({
+                'filename': file.filename,
+                'status': result.status,
+                'message': result.message,
+                'processed_chunks': result.processed_chunks,
+                'embeddings_created': result.embeddings_created,
+                'processing_time': result.processing_time,
+                'error': result.error,
+            })
+
+        except Exception as e:
+            results.append({
+                'filename': file.filename,
+                'status': 'error',
+                'message': 'Failed to process file',
+                'processed_chunks': 0,
+                'embeddings_created': 0,
+                'processing_time': None,
+                'error': str(e),
+            })
+
+    # Calculate summary statistics
+    total_chunks = sum(r['processed_chunks'] for r in results)
+    total_embeddings = sum(r['embeddings_created'] for r in results)
+    successful_files = sum(1 for r in results if r['status'] == 'success')
+
+    return {
+        'summary': {
+            'total_files': len(files),
+            'successful_files': successful_files,
+            'failed_files': len(files) - successful_files,
+            'total_chunks_processed': total_chunks,
+            'total_embeddings_created': total_embeddings,
+        },
+        'results': results,
+    }
 
 
 @router.get('/get_all')

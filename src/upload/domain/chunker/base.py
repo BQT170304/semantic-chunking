@@ -14,10 +14,10 @@ class Chunk(BaseModel):
     id: int
     content: str
     filename: str
+    section_title: str
+    type: Optional[str] = None
     position: Optional[int] = 0
     tokens: Optional[int] = None
-    section_title: str
-    type: str
     content_json: Optional[List[Dict[str, str]]] = None
     heading_level: Optional[int] = None
 

@@ -5,27 +5,33 @@ import math
 import re
 from typing import Dict
 from typing import List
-from typing import Optional
 
 import nltk
-from nltk.tokenize import sent_tokenize
 
-from ...shared.base.base_model import BaseModel
 from .base import BaseChunkerService
 from .base import Chunk
 from .base import ChunkerInput
 from .base import ChunkerOutput
 nltk.download('punkt')
+nltk.download('punkt_tab')
 
 
 class ChunkerService(BaseChunkerService):
+    def __init__(self):
+        self.chunker = Chunker()
+
     def process(self, input_data: ChunkerInput) -> ChunkerOutput:
+        chunks = self.chunker.chunk_markdown_by_title_and_tokens(
+            text=input_data.text,
+            filename=input_data.metadata.get('filename', 'unknown'),
+            min_heading_level=input_data.metadata.get('min_heading_level', 1),
+        )
         return ChunkerOutput(
-            chunks=[],
+            chunks=chunks,
         )
 
 
-class ChunkerService1:
+class Chunker:
     def __init__(self):
         self.chunk_id = 0
 
@@ -224,7 +230,7 @@ class ChunkerService1:
             result.append('| Thông tin | Chi tiết |')
             result.append('| --- | --- |')
             for item in address_items:
-                result.append(f"| {item['key'].replace('|', '\\|')} | {item['value'].replace('|', '\\|')} |")
+                result.append(f"| {item['key']} | {item['value']} |")
             result.append('')
 
         if other_items:
@@ -232,7 +238,7 @@ class ChunkerService1:
             result.append('| Thông tin | Chi tiết |')
             result.append('| --- | --- |')
             for item in other_items:
-                result.append(f"| {item['key'].replace('|', '\\|')} | {item['value'].replace('|', '\\|')} |")
+                result.append(f"| {item['key']} | {item['value']} |")
 
         return '\n'.join(result)
 
@@ -253,8 +259,8 @@ class ChunkerService1:
         if len(bullet_items) >= 3:
             table_lines = ['| Thông tin | Chi tiết |', '| --- | --- |']
             for item in bullet_items:
-                key = item['key'].replace('|', '\\|')
-                value = item['value'].replace('|', '\\|')
+                key = item['key']
+                value = item['value']
                 table_lines.append(f'| {key} | {value} |')
             return '\n'.join(table_lines)
 

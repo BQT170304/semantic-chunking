@@ -169,3 +169,4 @@ src/cv_extractor/tests/test_ignore
 
 *.ipynb
 /.idea
+test.py

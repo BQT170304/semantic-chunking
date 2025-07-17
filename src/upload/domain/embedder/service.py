@@ -6,19 +6,13 @@ from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict
 from typing import List
+from typing import Optional
 
 import boto3
-from config import INDEX_NAME
-from config import logger
-from config import MAX_WORKERS
-from config import OPENSEARCH_ENDPOINT
-from config import OPENSEARCH_PASSWORD
-from config import OPENSEARCH_USERNAME
-from config import REGION_NAME
 from opensearchpy import OpenSearch
 from opensearchpy import RequestsHttpConnection
 from opensearchpy.helpers import bulk
-from requests.auth import HTTPBasicAuth
+from requests.auth import HTTPBasicAuth  # type: ignore
 
 from .base import BaseEmbedderService
 from .base import BaseEmbeddingGenerator
@@ -26,6 +20,13 @@ from .base import BaseStorage
 from .base import ChunkData
 from .base import EmbedderInput
 from .base import EmbedderOutput
+from .config import INDEX_NAME
+from .config import logger
+from .config import MAX_WORKERS
+from .config import OPENSEARCH_ENDPOINT
+from .config import OPENSEARCH_PASSWORD
+from .config import OPENSEARCH_USERNAME
+from .config import REGION_NAME
 
 
 class BedrockEmbeddingGenerator(BaseEmbeddingGenerator):
@@ -80,12 +81,18 @@ class OpenSearchStorage(BaseStorage):
 
     def __init__(
         self,
-        endpoint: str = OPENSEARCH_ENDPOINT,
+        endpoint: Optional[str] = OPENSEARCH_ENDPOINT,
         username: str = OPENSEARCH_USERNAME,
-        password: str = OPENSEARCH_PASSWORD,
+        password: Optional[str] = OPENSEARCH_PASSWORD,
         index_name: str = INDEX_NAME,
     ):
         self.index_name = index_name
+
+        if endpoint is None:
+            raise ValueError('OPENSEARCH_ENDPOINT is required')
+        if password is None:
+            raise ValueError('OPENSEARCH_PASSWORD is required')
+
         auth = HTTPBasicAuth(username, password)
         self.client = OpenSearch(
             hosts=[{'host': endpoint, 'port': 443}],
@@ -232,36 +239,19 @@ class EmbedderService(BaseEmbedderService):
         self.storage = storage or OpenSearchStorage()
 
     def process(self, input_data: EmbedderInput) -> EmbedderOutput:
-        """Process a single embedding request."""
-        try:
-            # Generate embedding for single text
-            embeddings = self.embedding_generator.get_embedding_batch([input_data.chunk])
-            embedding = embeddings.get(0)
-
-            return EmbedderOutput(
-                id=input_data.metadata.get('id'),
-                index_name=INDEX_NAME,
-                embedding=embedding,
-            )
-        except Exception as e:
-            logger.error(f'Lỗi xử lý embedding: {e}')
-            return EmbedderOutput(
-                id=input_data.metadata.get('id'),
-                index_name=INDEX_NAME,
-                embedding=None,
-            )
-
-    def process_chunks(self, chunks: List[ChunkData]) -> bool:
         """Process multiple chunks with embeddings and storage."""
         try:
             # Test connection first
             if not self.storage.test_connection():
                 logger.error('Không thể kết nối với opensearch')
-                return False
+                return EmbedderOutput(
+                    index_name=None,
+                    num_embeddings=0,
+                )
 
             # Create index if not exists
             self.storage.create_optimized_index()
-
+            chunks = input_data.chunks
             # Process embeddings
             start_time = time.time()
             texts = [chunk.content for chunk in chunks]
@@ -275,16 +265,14 @@ class EmbedderService(BaseEmbedderService):
             end_time = time.time()
             logger.info(f'Thời gian xử lý: {end_time - start_time:.2f} giây')
 
-            return True
+            return EmbedderOutput(
+                index_name=self.storage.index_name,
+                num_embeddings=len(chunks),
+            )
 
         except Exception as e:
             logger.error(f'Lỗi xử lý chunks: {e}')
-            return False
-          
-class EmbedderService(BaseEmbedderService):
-    def process(self, input_data: EmbedderInput) -> EmbedderOutput:
-        return EmbedderOutput(
-            id='',
-            index_name='',
-            embedding=[],
-        )
+            return EmbedderOutput(
+                index_name=None,
+                num_embeddings=0,
+            )
