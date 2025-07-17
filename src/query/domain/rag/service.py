@@ -68,14 +68,11 @@ class RAG:
                 filters.append({'terms': {'filename': documents}})
 
             if filters:
-                if len(filters) == 1:
-                    search_kwargs['filter'] = filters[0]
-                else:
-                    search_kwargs['filter'] = {
-                        'bool': {
-                            'must': filters,
-                        },
-                    }
+                search_kwargs['filter'] = {
+                    'bool': {
+                        'must': filters,
+                    },
+                }
 
             # Retrieve relevant documents
             docs = self.retriever.get_relevant_documents(question, k=3, search_kwargs=search_kwargs)
