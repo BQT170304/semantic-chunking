@@ -1,7 +1,9 @@
+aiohttp
 asgi_correlation_id==4.2.0
 boto3==1.28
 fastapi==0.109.1
-opencv-python==4.12.0
+nltk==3.9.1
+opencv-python
 openpyxl==3.1.5
 opensearch-py==2.4.0
 pandas==2.2.3

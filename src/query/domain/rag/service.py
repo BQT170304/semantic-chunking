@@ -27,7 +27,7 @@ class RAG:
         self.opensearch_endpoint = os.getenv('OPENSEARCH_ENDPOINT')
         self.opensearch_username = os.getenv('OPENSEARCH_USERNAME')
         self.opensearch_password = os.getenv('OPENSEARCH_PASSWORD')
-        self.tenant_id = os.getenv('TENANT_ID')
+        self.tenant_id = os.getenv('TENANT_ID', '')
 
         # Validate required environment variables
         if not self.opensearch_endpoint:
@@ -44,7 +44,7 @@ class RAG:
                 opensearch_username=self.opensearch_username,
                 opensearch_password=self.opensearch_password,
                 bedrock_embeddings_client=self.embeddings_client,
-                opensearch_endpoint=self.opensearch_endpoint,
+                opensearch_endpoint=f'https://{self.opensearch_endpoint}',
             )
         except Exception as e:
             logger.error(f'Failed to initialize RAG components: {str(e)}')
