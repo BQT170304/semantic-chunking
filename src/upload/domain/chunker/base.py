@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC
 from abc import abstractmethod
+from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -10,10 +11,15 @@ from pydantic import BaseModel
 
 class Chunk(BaseModel):
     """Represents a chunk of text."""
-    title: str
+    id: int
     content: str
-    tag: Optional[str] = None
-    metadata: dict  # Filename,...
+    filename: str
+    position: Optional[int] = 0
+    tokens: Optional[int] = None
+    section_title: str
+    type: str
+    content_json: Optional[List[Dict[str, str]]] = None
+    heading_level: Optional[int] = None
 
 
 class ChunkerInput(BaseModel):
