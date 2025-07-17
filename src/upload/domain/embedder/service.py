@@ -138,7 +138,7 @@ class OpenSearchStorage(BaseStorage):
                     },
                     'embedding_vector': {
                         'type': 'knn_vector',
-                        'dimension': 1536,
+                        'dimension': 1024,
                         'method': {
                             'name': 'hnsw',
                             'space_type': 'cosinesimil',
