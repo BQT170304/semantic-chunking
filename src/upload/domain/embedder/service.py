@@ -280,3 +280,11 @@ class EmbedderService(BaseEmbedderService):
         except Exception as e:
             logger.error(f'Lỗi xử lý chunks: {e}')
             return False
+          
+class EmbedderService(BaseEmbedderService):
+    def process(self, input_data: EmbedderInput) -> EmbedderOutput:
+        return EmbedderOutput(
+            id='',
+            index_name='',
+            embedding=[],
+        )

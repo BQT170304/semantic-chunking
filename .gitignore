@@ -168,3 +168,4 @@ master_data
 src/cv_extractor/tests/test_ignore
 
 *.ipynb
+/.idea
