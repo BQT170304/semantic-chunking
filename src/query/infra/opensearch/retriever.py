@@ -34,6 +34,8 @@ class OpenSearchRetriever:
                 query,
                 k=k,
                 search_kwargs=search_kwargs or {},
+                vector_field='embedding_vector',
+                text_field='content',
             )
             return docs
         except Exception as e:

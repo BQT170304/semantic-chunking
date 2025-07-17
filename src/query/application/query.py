@@ -8,8 +8,8 @@ from domain.rag.service import RAG
 
 
 class AskApplication:
-    def __init__(self):
-        self.rag = RAG()
+    def __init__(self, rag: RAG):
+        self.rag = rag
 
     async def ask(self, ask_request: AskRequest) -> AskResponse:
         # Validate input

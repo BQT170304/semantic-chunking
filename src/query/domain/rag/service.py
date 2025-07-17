@@ -19,10 +19,10 @@ logger = get_logger(__name__)
 class RAG:
     def __init__(self):
         # Environment variables with validation
-        self.region = os.getenv('AWS_REGION', 'us-east-1')
-        self.index_name = os.getenv('OPENSEARCH_INDEX', 'rag')
-        self.bedrock_model_id = os.getenv('BEDROCK_MODEL_ID', 'amazon.titan-text-lite-v1')
-        self.bedrock_embedding_model_id = os.getenv('BEDROCK_EMBEDDING_MODEL_ID', 'amazon.titan-embed-text-v1')
+        self.region = os.getenv('AWS_REGION', 'ap-southeast-2')
+        self.index_name = os.getenv('OPENSEARCH_INDEX', 'semantic_chunks')
+        self.bedrock_model_id = os.getenv('BEDROCK_MODEL_ID', 'anthropic.claude-3-haiku-20240307-v1:0')
+        self.bedrock_embedding_model_id = os.getenv('BEDROCK_EMBEDDING_MODEL_ID', 'amazon.titan-embed-text-v2:0')
         self.opensearch_endpoint = os.getenv('OPENSEARCH_ENDPOINT')
         self.opensearch_username = os.getenv('OPENSEARCH_USERNAME')
         self.opensearch_password = os.getenv('OPENSEARCH_PASSWORD')
