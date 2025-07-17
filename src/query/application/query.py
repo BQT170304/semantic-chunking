@@ -2,28 +2,28 @@ from __future__ import annotations
 
 import asyncio
 
-from api.models.query import AskRequest
-from api.models.query import AskResponse
+from api.models.query import ChatRequest
+from api.models.query import ChatResponse
 from domain.rag.service import RAG
 
 
-class AskApplication:
+class ChatApplication:
     def __init__(self, rag: RAG):
         self.rag = rag
 
-    async def ask(self, ask_request: AskRequest) -> AskResponse:
+    async def process(self, chat_request: ChatRequest) -> ChatResponse:
         # Validate input
-        if not ask_request.question.strip():
-            raise ValueError('Question cannot be empty')
+        if not chat_request.message.strip():
+            raise ValueError('Message cannot be empty')
 
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
             self.rag.process,
-            ask_request.question,
+            chat_request.message,
         )
 
-        return AskResponse(
-            answer=result['answer'],
+        return ChatResponse(
+            message=result['message'],
             sources=result.get('sources', []),
         )

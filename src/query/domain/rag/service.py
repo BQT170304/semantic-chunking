@@ -76,7 +76,7 @@ class RAG:
             answer = self.llm_client.generate(prompt=prompt, context='')
 
             return {
-                'answer': answer,
+                'message': answer,
                 'sources': sources,
             }
 

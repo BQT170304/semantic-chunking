@@ -2,22 +2,22 @@ from __future__ import annotations
 
 import logging
 
-from api.models.query import AskRequest
-from api.models.query import AskResponse
-from application.query import AskApplication
+from api.models.query import ChatRequest
+from api.models.query import ChatResponse
+from application.query import ChatApplication
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
 
-router = APIRouter(tags=['ask'])
+router = APIRouter(tags=['chat'])
 
 
-@router.post('/ask', response_model=AskResponse)
-async def ask_endpoint(request: Request, ask_request: AskRequest):
+@router.post('/chat', response_model=ChatResponse)
+async def chat_endpoint(request: Request, chat_request: ChatRequest):
     try:
         rag = request.app.state.rag
-        ask_application = AskApplication(rag=rag)
-        return await ask_application.ask(ask_request)
+        chat_application = ChatApplication(rag=rag)
+        return await chat_application.process(chat_request)
     except ValueError as e:
         logging.error(f'Validation error: {str(e)}')
         raise HTTPException(status_code=400, detail=str(e))
