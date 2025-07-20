@@ -14,3 +14,12 @@ RUN pip install --upgrade pip
 
 # Increase timeout to wait for the new installation
 RUN pip install --no-cache-dir -r requirements.txt --timeout 200
+
+# Copy source code (for production, but will be overridden by bind mount in development)
+COPY . .
+
+# Expose port
+EXPOSE 8001
+
+# Set Python path to include the src directory
+ENV PYTHONPATH=/app:/app/src

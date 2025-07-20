@@ -1,0 +1,48 @@
+services:
+  upload-service:
+    build:
+      context: ./src/upload
+      dockerfile: Dockerfile
+    container_name: semantic-chunking-upload
+    ports:
+      - "8000:8000"
+    volumes:
+      # Bind mount the entire src directory to enable hot reload
+      - ./src:/app/src
+      # Bind mount the specific upload service files
+      - ./src/upload:/app
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app:/app/src
+      - PYTHONUNBUFFERED=1
+    working_dir: /app
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    networks:
+      - semantic-chunking-network
+
+  query-service:
+    build:
+      context: ./src/query
+      dockerfile: Dockerfile
+    container_name: semantic-chunking-query
+    ports:
+      - "8001:8001"
+    volumes:
+      # Bind mount the entire src directory to enable hot reload
+      - ./src:/app/src
+      # Bind mount the specific query service files
+      - ./src/query:/app
+    environment:
+      - PYTHONPATH=/app:/app/src
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    working_dir: /app
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+    networks:
+      - semantic-chunking-network
+
+networks:
+  semantic-chunking-network:
+    driver: bridge
