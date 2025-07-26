@@ -2,11 +2,21 @@ from __future__ import annotations
 
 from abc import ABC
 from abc import abstractmethod
+from enum import Enum
 from typing import Optional
 from typing import Union
 
 from fastapi import UploadFile
 from pydantic import BaseModel
+
+
+class FileType(Enum):
+    """File types for parsing."""
+    PDF = 'pdf'
+    DOCX = 'docx'
+    XLSX = 'xlsx'
+    IMAGE = 'image'
+    UNKNOWN = 'unknown'
 
 
 class ParserInput(BaseModel):

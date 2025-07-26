@@ -5,7 +5,9 @@ from contextlib import asynccontextmanager
 import uvicorn
 from api.routers import document_router
 from domain.chunker import ChunkerService
+from domain.embedder import BedrockEmbeddingGenerator
 from domain.embedder import EmbedderService
+from domain.embedder import OpenSearchStorage
 from domain.parser import ParserService
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +25,10 @@ async def lifespan(app: FastAPI):
     logger.info('Initializing domain services...')
     parser = ParserService()
     chunker = ChunkerService()
-    embedder = EmbedderService()
+    embedder = EmbedderService(
+        embedding_generator=BedrockEmbeddingGenerator(),
+        storage=OpenSearchStorage(),
+    )
 
     app.state.parser = parser
     app.state.chunker = chunker
