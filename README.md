@@ -41,19 +41,6 @@ AWS_ACCESS_KEY_ID=your-aws-access-key
 AWS_SECRET_ACCESS_KEY=your-aws-secret-key
 AWS_REGION=us-east-1
 BEDROCK_MODEL_ID=anthropic.claude-3-sonnet-20240229-v1:0
-
-# API Configuration
-UPLOAD_SERVICE_URL=http://localhost:8000
-QUERY_SERVICE_URL=http://localhost:8001
-FRONTEND_URL=http://localhost:3000
-
-# Security
-SECRET_KEY=your-secret-key-here
-ALLOWED_ORIGINS=http://localhost:3000
-
-# File Storage
-MAX_FILE_SIZE=50MB
-ALLOWED_FILE_TYPES=pdf,docx,txt,md
 ```
 
 ### 2. Run Backend with Docker
