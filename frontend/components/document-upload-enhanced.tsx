@@ -261,74 +261,77 @@ export function DocumentUpload({ onUpload }: DocumentUploadProps) {
                 : workerSettings.maxWorkers}{" "}
               workers
             </Badge>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSettings(!showSettings)}
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
+            <Collapsible open={showSettings} onOpenChange={setShowSettings}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+            </Collapsible>
           </div>
         </div>
 
-        {/* Worker Settings */}
-        {showSettings && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg space-y-4">
-            <h3 className="text-sm font-medium text-gray-700">
-              Worker Settings
-            </h3>
+        <Collapsible open={showSettings} onOpenChange={setShowSettings}>
+          <CollapsibleContent>
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg space-y-4">
+              <h3 className="text-sm font-medium text-gray-700">
+                Worker Settings
+              </h3>
 
-            <div className="flex items-center justify-between">
-              <Label htmlFor="auto-scale" className="text-sm">
-                Auto-scale workers
-              </Label>
-              <Switch
-                checked={workerSettings.enableAutoScale}
-                onCheckedChange={(checked: boolean) =>
-                  setWorkerSettings((prev) => ({
-                    ...prev,
-                    enableAutoScale: checked,
-                  }))
-                }
-              />
-            </div>
-
-            {!workerSettings.enableAutoScale && (
-              <div className="space-y-2">
-                <Label htmlFor="max-workers" className="text-sm">
-                  Max workers
+              <div className="flex items-center justify-between">
+                <Label htmlFor="auto-scale" className="text-sm">
+                  Auto-scale workers
                 </Label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="8"
-                  value={workerSettings.maxWorkers}
-                  onChange={(e) =>
+                <Switch
+                  id="auto-scale"
+                  checked={workerSettings.enableAutoScale}
+                  onCheckedChange={(checked) =>
                     setWorkerSettings((prev) => ({
                       ...prev,
-                      maxWorkers: Math.max(
-                        1,
-                        Math.min(8, parseInt(e.target.value) || 1)
-                      ),
+                      enableAutoScale: checked,
                     }))
                   }
-                  className="w-20"
                 />
               </div>
-            )}
 
-            <div className="grid grid-cols-2 gap-4 text-xs text-gray-600">
-              <div className="flex items-center gap-1">
-                <HardDrive className="h-3 w-3" />
-                Memory: {workerSettings.memoryLimitPerWorkerMB}MB/worker
-              </div>
-              <div className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                Timeout: {workerSettings.timeoutPerFileSeconds}s/file
+              {!workerSettings.enableAutoScale && (
+                <div className="space-y-2">
+                  <Label htmlFor="max-workers" className="text-sm">
+                    Max workers
+                  </Label>
+                  <Input
+                    id="max-workers"
+                    type="number"
+                    min="1"
+                    max="8"
+                    value={workerSettings.maxWorkers}
+                    onChange={(e) =>
+                      setWorkerSettings((prev) => ({
+                        ...prev,
+                        maxWorkers: Math.max(
+                          1,
+                          Math.min(8, parseInt(e.target.value) || 1)
+                        ),
+                      }))
+                    }
+                    className="w-20"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 text-xs text-gray-600">
+                <div className="flex items-center gap-1">
+                  <HardDrive className="h-3 w-3" />
+                  Memory: {workerSettings.memoryLimitPerWorkerMB}MB/worker
+                </div>
+                <div className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  Timeout: {workerSettings.timeoutPerFileSeconds}s/file
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* Success Alert */}
         {uploadSuccess && (

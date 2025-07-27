@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from io import BytesIO
 from typing import List
@@ -23,25 +24,38 @@ from PIL import ImageEnhance
 
 from .base import FileType
 
+logger = logging.getLogger(__name__)
+
 
 class ExtractorService:
     """Service for extracting raw text from various file formats."""
 
+    def __init__(self):
+        """Initialize the extractor service with optimizations for multi-worker usage."""
+        self._tesseract_config_vie = r'--oem 3 --psm 6 -l vie'
+        self._tesseract_config_eng = r'--oem 3 --psm 6 -l eng'
+
     def extract(self, file: UploadFile) -> str:
         """Extract raw text from the given file based on its format."""
-        file_type = self.get_file_type(file)
+        try:
+            file_type = self.get_file_type(file)
+            logger.info(f"Processing file {file.filename} of type {file_type}")
 
-        extraction_methods = {
-            FileType.PDF: self.extract_pdf,
-            FileType.DOCX: self.extract_docx,
-            FileType.XLSX: self.extract_xlsx,
-            FileType.IMAGE: self.extract_image,
-        }
+            extraction_methods = {
+                FileType.PDF: self.extract_pdf,
+                FileType.DOCX: self.extract_docx,
+                FileType.XLSX: self.extract_xlsx,
+                FileType.IMAGE: self.extract_image,
+            }
 
-        if file_type in extraction_methods:
-            return extraction_methods[file_type](file)
-        else:
-            raise ValueError(f"Unsupported file type: {file_type}")
+            if file_type in extraction_methods:
+                return extraction_methods[file_type](file)
+            else:
+                raise ValueError(f"Unsupported file type: {file_type}")
+
+        except Exception as e:
+            logger.error(f"Error extracting from file {file.filename}: {str(e)}")
+            raise
 
     def get_file_type(self, file: UploadFile) -> FileType:
         """Determine file type based on filename and content type."""
@@ -253,14 +267,12 @@ class ExtractorService:
                 x, y, w, h = bbox
                 table_crop = image.crop((x, y, x + w, y + h))
 
-                custom_config = r'--oem 3 --psm 6 -l vie'
-                table_text = pytesseract.image_to_string(table_crop, config=custom_config)
+                table_text = pytesseract.image_to_string(table_crop, config=self._tesseract_config_vie)
                 table_text = table_text.strip()
 
                 # If Vietnamese fails, try English only
                 if not table_text:
-                    custom_config = r'--oem 3 --psm 6 -l eng'
-                    table_text = pytesseract.image_to_string(table_crop, config=custom_config)
+                    table_text = pytesseract.image_to_string(table_crop, config=self._tesseract_config_eng)
                     table_text = table_text.strip()
 
                 rows = [row.strip().split() for row in table_text.strip().split('\n') if row.strip()]
@@ -273,15 +285,13 @@ class ExtractorService:
                 draw.rectangle([x, y, x + w, y + h], fill=0)
             text_only_image = Image.composite(image, Image.new('RGB', image.size, (255, 255, 255)), mask)
 
-            custom_config = r'--oem 3 --psm 6 -l vie'
-            text_content = pytesseract.image_to_string(text_only_image, config=custom_config)
-            text_content = table_text.strip()
+            text_content = pytesseract.image_to_string(text_only_image, config=self._tesseract_config_vie)
+            text_content = text_content.strip()
 
             # If Vietnamese fails, try English only
             if not text_content:
-                custom_config = r'--oem 3 --psm 6 -l eng'
-                text_content = pytesseract.image_to_string(text_only_image, config=custom_config)
-                text_content = table_text.strip()
+                text_content = pytesseract.image_to_string(text_only_image, config=self._tesseract_config_eng)
+                text_content = text_content.strip()
 
             text_blocks = []
 
@@ -317,14 +327,12 @@ class ExtractorService:
             enhancer = ImageEnhance.Sharpness(image)
             image = enhancer.enhance(1.1)
 
-            custom_config = r'--oem 3 --psm 6 -l vie'
-            content = pytesseract.image_to_string(image, config=custom_config)
+            content = pytesseract.image_to_string(image, config=self._tesseract_config_vie)
             content = content.strip()
 
             # If Vietnamese fails, try English only
             if not content or len(content) < 5:
-                custom_config = r'--oem 3 --psm 6 -l eng'
-                content = pytesseract.image_to_string(image, config=custom_config)
+                content = pytesseract.image_to_string(image, config=self._tesseract_config_eng)
                 content = content.strip()
 
             return content
