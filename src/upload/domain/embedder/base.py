@@ -23,7 +23,7 @@ class EmbedderOutput(BaseModel):
 
 class ChunkData(BaseModel):
     """Data model for chunk processing."""
-    id: str
+    id: int
     content: str
     section_title: str
     filename: str

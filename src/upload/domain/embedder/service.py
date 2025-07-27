@@ -137,7 +137,7 @@ class OpenSearchStorage(BaseStorage):
             },
             'mappings': {
                 'properties': {
-                    'id': {'type': 'keyword'},
+                    'id': {'type': 'integer'},
                     'content': {
                         'type': 'text',
                         'analyzer': 'standard',
@@ -180,22 +180,40 @@ class OpenSearchStorage(BaseStorage):
             logger.error(f'Lỗi tạo index: {e}')
             raise
 
+    def get_max_id(self) -> int:
+        try:
+            body = {
+                "size": 0,
+                "aggs": {
+                    "max_id": {"max": {"field": "id"}}
+                }
+            }
+            res = self.client.search(index=self.index_name, body=body)
+            max_id = res["aggregations"]["max_id"]["value"]
+            return int(max_id) if max_id is not None else 0
+        except Exception as e:
+            logger.error(f'Lỗi lấy max id: {e}')
+            return 0
+
     def bulk_index_chunks(self, chunks: List[ChunkData], embeddings: Dict[int, List[float]]) -> None:
-        """Bulk index chunks with embeddings."""
         actions = []
         successful_count = 0
+
+        max_id = self.get_max_id()
 
         for idx, chunk in enumerate(chunks):
             embedding = embeddings.get(idx)
             if embedding is None:
-                logger.warning(f'Bỏ qua chunk ID {chunk.id} vì lỗi embedding.')
+                logger.warning(f'Bỏ qua chunk vì lỗi embedding.')
                 continue
+
+            chunk_id = max_id + idx + 1
 
             action = {
                 '_index': self.index_name,
-                '_id': chunk.id,
+                '_id': chunk_id,
                 '_source': {
-                    'id': chunk.id,
+                    'id': chunk_id,
                     'content': chunk.content,
                     'embedding_vector': embedding,
                     'filename': chunk.filename,
@@ -216,7 +234,7 @@ class OpenSearchStorage(BaseStorage):
                 self.client,
                 actions,
                 index=self.index_name,
-                chunk_size=50,
+                chunk_size=100,
                 request_timeout=120,
                 max_retries=5,
             )
