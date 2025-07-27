@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
-from typing import List
 from typing import Optional
 
 from domain.chunker import ChunkerInput
 from domain.chunker import ChunkerService
 from domain.embedder import ChunkData
 from domain.embedder import EmbedderInput
-from domain.embedder import EmbedderOutput
 from domain.embedder import EmbedderService
 from domain.parser import ParserInput
 from domain.parser import ParserService
@@ -61,7 +60,7 @@ class UploadDocumentApplication:
 
             logger.info('Step 1: Parsing document...')
             parser_input = ParserInput(file=input_data.file)
-            parser_output = self.parser.process(parser_input)
+            parser_output = asyncio.run(self.parser.process(parser_input))
             with open('text.md', 'w', encoding='utf-8') as f:
                 f.write(parser_output.raw_text)
 
@@ -108,7 +107,7 @@ class UploadDocumentApplication:
                     chunks=chunk_data_list,
                     metadata=file_metadata,
                 )
-                embedder_output = self.embedder.process(embedder_input)
+                embedder_output = asyncio.run(self.embedder.process(embedder_input))
 
                 # Check if embeddings were created successfully
                 if embedder_output.index_name:
