@@ -18,11 +18,11 @@ class Parser:
             region_name=region_name, model_id=model_id,
         )
 
-    def parse(self, raw_text: str) -> str:
+    async def parse(self, raw_text: str) -> str:
         logger.info('Starting document parsing', input_length=len(raw_text))
 
         # Get JSON structure from NovaMarkdownGenerator
-        json_output = self.generator.generate(raw_text)
+        json_output = await self.generator.generate(raw_text)
 
         logger.info(
             'Received JSON output from generator', output_length=len(json_output),
