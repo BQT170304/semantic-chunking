@@ -13,6 +13,7 @@ from domain.chunker import ChunkerInput
 from domain.chunker import ChunkerService
 from domain.embedder import ChunkData
 from domain.embedder import EmbedderInput
+from domain.embedder import EmbedderOutput
 from domain.embedder import EmbedderService
 from domain.parser import ParserInput
 from domain.parser import ParserService
@@ -73,7 +74,7 @@ class UploadDocumentApplication:
         self.chunker = chunker
         self.embedder = embedder
 
-    def upload_document(self, input_data: UploadDocumentInput, session_id: Optional[str] = None) -> UploadDocumentOutput:
+    async def upload_document(self, input_data: UploadDocumentInput, session_id: Optional[str] = None) -> UploadDocumentOutput:
         """Upload a document and process it through parsing, chunking, and embedding."""
         start_time = time.time()
         embeddings_created = 0
@@ -85,7 +86,8 @@ class UploadDocumentApplication:
 
             logger.info('Step 1: Parsing document...')
             parser_input = ParserInput(file=input_data.file)
-            parser_output = self.parser.process(parser_input)
+            parser_output = await self.parser.process(parser_input)
+
             with open(f'text_{input_data.file.filename}.md', 'w', encoding='utf-8') as f:
                 f.write(parser_output.raw_text)
 
@@ -132,7 +134,7 @@ class UploadDocumentApplication:
                     chunks=chunk_data_list,
                     metadata=file_metadata,
                 )
-                embedder_output = asyncio.run(self.embedder.process(embedder_input))
+                embedder_output = await self.embedder.process(embedder_input)
 
                 if embedder_output.index_name:
                     embeddings_created = len(chunk_data_list)
@@ -181,7 +183,7 @@ class UploadDocumentApplication:
         if total_files <= 1:
             # Single file processing - no need for multi-worker
             if total_files == 1:
-                result = self.upload_document(UploadDocumentInput(file=input_data.files[0]))
+                result = asyncio.run(self.upload_document(UploadDocumentInput(file=input_data.files[0])))
                 return UploadMultipleDocumentsOutput(
                     total_files=1,
                     successful_files=1 if result.status == 'success' else 0,
@@ -281,4 +283,4 @@ class UploadDocumentApplication:
 
     def _process_single_file(self, file: UploadFile) -> UploadDocumentOutput:
         """Process a single file - used by multi-worker processing."""
-        return self.upload_document(UploadDocumentInput(file=file))
+        return asyncio.run(self.upload_document(UploadDocumentInput(file=file)))

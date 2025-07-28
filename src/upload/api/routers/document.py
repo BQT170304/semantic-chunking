@@ -88,7 +88,7 @@ def upload_documents(
 
 
 @router.post('/upload/single')
-def upload_single_document(
+async def upload_single_document(
     file: UploadFile,
     application: UploadDocumentApplication = Depends(get_upload_application),
 ):
@@ -113,7 +113,7 @@ def upload_single_document(
 
         # Process the file through the application
         upload_input = UploadDocumentInput(file=file)
-        result = application.upload_document(upload_input)
+        result = await application.upload_document(upload_input)
 
         return {
             'filename': result.filename,
