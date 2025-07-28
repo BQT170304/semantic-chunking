@@ -137,8 +137,8 @@ class OpenSearchStorage(BaseStorage):
                 'index': {
                     'knn': True,
                     'knn.algo_param.ef_search': 512,
-                    'number_of_shards': 3,
-                    'number_of_replicas': 1,
+                    'number_of_shards': 1,
+                    'number_of_replicas': 2,
                     'refresh_interval': '30s',
                     'max_result_window': 10000,
                     'blocks': {
@@ -194,13 +194,13 @@ class OpenSearchStorage(BaseStorage):
     def get_max_id(self) -> int:
         try:
             body = {
-                "size": 0,
-                "aggs": {
-                    "max_id": {"max": {"field": "id"}}
-                }
+                'size': 0,
+                'aggs': {
+                    'max_id': {'max': {'field': 'id'}},
+                },
             }
             res = self.client.search(index=self.index_name, body=body)
-            max_id = res["aggregations"]["max_id"]["value"]
+            max_id = res['aggregations']['max_id']['value']
             return int(max_id) if max_id is not None else 0
         except Exception as e:
             logger.error(f'Lỗi lấy max id: {e}')
@@ -215,7 +215,7 @@ class OpenSearchStorage(BaseStorage):
         for idx, chunk in enumerate(chunks):
             embedding = embeddings.get(idx)
             if embedding is None:
-                logger.warning(f'Bỏ qua chunk vì lỗi embedding.')
+                logger.warning('Bỏ qua chunk vì lỗi embedding.')
                 continue
 
             chunk_id = max_id + idx + 1
