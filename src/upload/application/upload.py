@@ -87,6 +87,7 @@ class UploadDocumentApplication:
             logger.info('Step 1: Parsing document...')
             parser_input = ParserInput(file=input_data.file)
             parser_output = await self.parser.process(parser_input)
+
             with open(f'text_{input_data.file.filename}.md', 'w', encoding='utf-8') as f:
                 f.write(parser_output.raw_text)
 
