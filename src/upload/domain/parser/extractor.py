@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import os
+import threading
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import List
+from typing import Tuple
 
 import cv2
 import docx
@@ -129,39 +133,72 @@ class ExtractorService:
         except Exception as e:
             raise ValueError(f'Failed to convert PDF to images: {str(e)}')
 
+    def __process_single_page(self, page_data: Tuple[int, bytes, UploadFile]) -> Tuple[int, str]:
+        page_index, file_byte, file = page_data
+        file.file.seek(0)
+        try:
+            with pdfplumber.open(file.file) as pdf:
+                page = pdf.pages[page_index]
+                filtered_page = page
+                chars = filtered_page.chars
+
+                for table in page.find_tables():
+                    table_chars = page.crop(table.bbox).chars
+                    if not table_chars:
+                        continue
+                    first_table_char = table_chars[0]
+                    filtered_page = filtered_page.filter(
+                        lambda obj: get_bbox_overlap(obj_to_bbox(obj), table.bbox) is None,
+                    )
+                    chars = filtered_page.chars
+                    markdown = self.__table_to_markdown(table.extract())
+                    chars.append(first_table_char | {'text': markdown})
+
+                page_text = extract_text(chars, layout=True)
+
+                if not page_text:
+                    page_text = ''
+                    image = self.__convert_pdf_page_to_image(file_byte, page_index + 1)
+                    ocr_text = self.__ocr_image(image)
+                    if ocr_text:
+                        page_text += ocr_text + '\n'
+
+            return (page_index, page_text)
+
+        except Exception as e:
+            print(f'Lỗi xử lý trang {page_index + 1}: {str(e)}')
+            return (page_index, '')
+
     def extract_pdf(self, file: UploadFile) -> str:
         """Extract from a PDF file."""
         try:
             file.file.seek(0)
             file_byte = file.file.read()
-            with pdfplumber.open(file.file) as pdf:
-                content = []
 
-                for i, page in enumerate(pdf.pages):
-                    filtered_page = page
-                    chars = filtered_page.chars
-                    for table in page.find_tables():
-                        first_table_char = page.crop(table.bbox).chars[0]
-                        filtered_page = filtered_page.filter(
-                            lambda obj:
-                                get_bbox_overlap(obj_to_bbox(obj), table.bbox) is None,
-                        )
-                        chars = filtered_page.chars
-                        markdown = self.__table_to_markdown(table.extract())
-                        chars.append(first_table_char | {'text': markdown})
+            page_data_list = [(i, file_byte, file) for i in range(len(pdfplumber.open(file.file).pages))]
 
-                    page_text = extract_text(chars, layout=True)
+            results = {}
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                future_to_index = {
+                    executor.submit(self.__process_single_page, page_data): page_data[0]
+                    for page_data in page_data_list
+                }
 
-                    if not page_text:
-                        page_text = ''
-                        image = self.__convert_pdf_page_to_image(file_byte, i + 1)
-                        ocr_text = self.__ocr_image(image)
-                        if ocr_text:
-                            page_text += ocr_text + '\n'
+                for future in as_completed(future_to_index):
+                    try:
+                        page_index, page_text = future.result()
+                        results[page_index] = page_text.strip()
+                    except Exception as e:
+                        page_index = future_to_index[future]
+                        print(f'Lỗi xử lý trang {page_index + 1}: {str(e)}')
+                        results[page_index] = ''
 
-                    content.append(page_text)
+            content = []
+            for i in sorted(results.keys()):
+                content.append(results[i])
 
-                return '\n'.join(content)
+            return '\n'.join(content)
+
         except Exception as e:
             raise ValueError(f'Failed to extract text from PDF file: {str(e)}')
 
