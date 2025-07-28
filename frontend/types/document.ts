@@ -5,6 +5,9 @@ export interface Document {
   size: number;
   uploadedAt: Date;
   status: "processing" | "processed" | "error";
+  processingTime?: number;
+  chunks?: number;
+  embeddings?: number;
 }
 
 export interface UploadResult {
@@ -24,6 +27,26 @@ export interface UploadResponse {
     failed_files: number;
     total_chunks_processed: number;
     total_embeddings_created: number;
+    total_processing_time: number;
+    workers_used: number;
   };
   results: UploadResult[];
+  errors: string[];
+}
+
+export interface UploadProgress {
+  filename: string;
+  status: "pending" | "processing" | "completed" | "error";
+  progress: number; // 0-100
+  processingTime?: number;
+  chunks?: number;
+  embeddings?: number;
+  error?: string;
+}
+
+export interface WorkerSettings {
+  maxWorkers: number;
+  enableAutoScale: boolean;
+  memoryLimitPerWorkerMB: number;
+  timeoutPerFileSeconds: number;
 }

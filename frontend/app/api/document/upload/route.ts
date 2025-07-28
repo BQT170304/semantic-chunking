@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SERVER_BASE_URL = process.env.UPLOAD_SERVER_BASE_URL || "http://localhost:8000";
+const SERVER_BASE_URL =
+  process.env.UPLOAD_SERVER_BASE_URL || "http://localhost:8000";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,12 +12,24 @@ export async function POST(req: NextRequest) {
     const response = await fetch(targetUrl, {
       method: "POST",
       body: formData,
+      headers: {
+        // Don't set Content-Type, let fetch handle it for FormData
+      },
     });
 
-    const result = await response.text();
-    return new NextResponse(result, {
-      status: response.status,
-    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Backend error:", errorText);
+      return new NextResponse(errorText, {
+        status: response.status,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+    }
+
+    const result = await response.json();
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Error in API proxy route:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
