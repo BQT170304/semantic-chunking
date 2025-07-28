@@ -14,9 +14,10 @@ class ParserService(BaseParserService):
         self.extractor = ExtractorService()
         self.parser = Parser()
 
-    def process(self, input_data: ParserInput) -> ParserOutput:
+    async def process(self, input_data: ParserInput) -> ParserOutput:
         extracted_text = self.extractor.extract(input_data.file)
-        raw_text = self.parser.parse(extracted_text)
+        raw_text = await self.parser.parse(extracted_text)
+
 
         _, ext = os.path.splitext(input_data.file.filename.lower())
         return ParserOutput(

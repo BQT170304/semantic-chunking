@@ -23,7 +23,7 @@ class EmbedderOutput(BaseModel):
 
 class ChunkData(BaseModel):
     """Data model for chunk processing."""
-    id: str
+    id: int
     content: str
     section_title: str
     filename: str
@@ -38,7 +38,7 @@ class BaseEmbedderService(ABC):
     """Abstract base class for embedders."""
 
     @abstractmethod
-    def process(self, input_data: EmbedderInput) -> EmbedderOutput:
+    async def process(self, input_data: EmbedderInput) -> EmbedderOutput:
         """Generate embeddings for the input text."""
         raise NotImplementedError()
 
@@ -47,7 +47,7 @@ class BaseEmbeddingGenerator(ABC):
     """Abstract base class for embedding generators."""
 
     @abstractmethod
-    def get_embedding_batch(self, texts: List[str]) -> Dict[int, List[float]]:
+    async def get_embedding_batch(self, texts: List[str]) -> Dict[int, List[float]]:
         """Generate embeddings for multiple texts."""
         raise NotImplementedError()
 

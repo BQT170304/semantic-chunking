@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -12,7 +13,6 @@ from domain.chunker import ChunkerInput
 from domain.chunker import ChunkerService
 from domain.embedder import ChunkData
 from domain.embedder import EmbedderInput
-from domain.embedder import EmbedderOutput
 from domain.embedder import EmbedderService
 from domain.parser import ParserInput
 from domain.parser import ParserService
@@ -132,7 +132,7 @@ class UploadDocumentApplication:
                     chunks=chunk_data_list,
                     metadata=file_metadata,
                 )
-                embedder_output = self.embedder.process(embedder_input)
+                embedder_output = asyncio.run(self.embedder.process(embedder_input))
 
                 if embedder_output.index_name:
                     embeddings_created = len(chunk_data_list)

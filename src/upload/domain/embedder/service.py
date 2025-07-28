@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from concurrent.futures import as_completed
@@ -36,44 +37,54 @@ class BedrockEmbeddingGenerator(BaseEmbeddingGenerator):
         self.bedrock = boto3.client('bedrock-runtime', region_name=region_name)
         self.max_workers = max_workers
         self.embedding_cache: dict[str, List[float]] = {}
+        self.semaphore = asyncio.Semaphore(max_workers)
 
-    def get_embedding_batch(self, texts: List[str]) -> Dict[int, List[float]]:
+    async def get_embedding_batch(self, texts: List[str]) -> Dict[int, List[float]]:
         """Generate embeddings for multiple texts using Bedrock."""
+
+        async def get_single_embedding(text: str, idx: int) -> tuple[int, Optional[List[float]]]:
+            async with self.semaphore:
+                if text in self.embedding_cache:
+                    return idx, self.embedding_cache[text]
+
+                model_id = 'amazon.titan-embed-text-v2:0'
+                body = {'inputText': text}
+
+                try:
+                    loop = asyncio.get_event_loop()
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda: self.bedrock.invoke_model(
+                            modelId=model_id,
+                            body=json.dumps(body),
+                            contentType='application/json',
+                            accept='application/json',
+                        ),
+                    )
+
+                    result = json.loads(response['body'].read())
+                    embedding = result['embedding']
+                    self.embedding_cache[text] = embedding
+                    return idx, embedding
+
+                except Exception as e:
+                    logger.error(f'Lỗi tạo embedding cho text {idx}: {e}')
+                    return idx, None
+
+        tasks = [get_single_embedding(text, idx) for idx, text in enumerate(texts)]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process results
         embeddings = {}
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f'Task failed with exception: {result}')
+                continue
+            idx, embedding = result  # type: ignore
+            embeddings[idx] = embedding
 
-        def get_single_embedding(text_item):
-            text, idx = text_item
-
-            if text in self.embedding_cache:
-                return idx, self.embedding_cache[text]
-
-            model_id = 'amazon.titan-embed-text-v2:0'
-            body = {'inputText': text}
-
-            try:
-                response = self.bedrock.invoke_model(
-                    modelId=model_id,
-                    body=json.dumps(body),
-                    contentType='application/json',
-                    accept='application/json',
-                )
-                result = json.loads(response['body'].read())
-                embedding = result['embedding']
-                self.embedding_cache[text] = embedding
-                return idx, embedding
-            except Exception as e:
-                logger.error(f'Lỗi tạo embedding cho text {idx}: {e}')
-                return idx, None
-
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            text_items = [(text, idx) for idx, text in enumerate(texts)]
-            future_to_text = {executor.submit(get_single_embedding, item): item for item in text_items}
-
-            for future in as_completed(future_to_text):
-                idx, embedding = future.result()
-                embeddings[idx] = embedding
-
-        return embeddings
+        return embeddings  # type: ignore
 
 
 class OpenSearchStorage(BaseStorage):
@@ -137,7 +148,7 @@ class OpenSearchStorage(BaseStorage):
             },
             'mappings': {
                 'properties': {
-                    'id': {'type': 'keyword'},
+                    'id': {'type': 'integer'},
                     'content': {
                         'type': 'text',
                         'analyzer': 'standard',
@@ -180,22 +191,40 @@ class OpenSearchStorage(BaseStorage):
             logger.error(f'Lỗi tạo index: {e}')
             raise
 
+    def get_max_id(self) -> int:
+        try:
+            body = {
+                "size": 0,
+                "aggs": {
+                    "max_id": {"max": {"field": "id"}}
+                }
+            }
+            res = self.client.search(index=self.index_name, body=body)
+            max_id = res["aggregations"]["max_id"]["value"]
+            return int(max_id) if max_id is not None else 0
+        except Exception as e:
+            logger.error(f'Lỗi lấy max id: {e}')
+            return 0
+
     def bulk_index_chunks(self, chunks: List[ChunkData], embeddings: Dict[int, List[float]]) -> None:
-        """Bulk index chunks with embeddings."""
         actions = []
         successful_count = 0
+
+        max_id = self.get_max_id()
 
         for idx, chunk in enumerate(chunks):
             embedding = embeddings.get(idx)
             if embedding is None:
-                logger.warning(f'Bỏ qua chunk ID {chunk.id} vì lỗi embedding.')
+                logger.warning(f'Bỏ qua chunk vì lỗi embedding.')
                 continue
+
+            chunk_id = max_id + idx + 1
 
             action = {
                 '_index': self.index_name,
-                '_id': chunk.id,
+                '_id': chunk_id,
                 '_source': {
-                    'id': chunk.id,
+                    'id': chunk_id,
                     'content': chunk.content,
                     'embedding_vector': embedding,
                     'filename': chunk.filename,
@@ -216,7 +245,7 @@ class OpenSearchStorage(BaseStorage):
                 self.client,
                 actions,
                 index=self.index_name,
-                chunk_size=50,
+                chunk_size=100,
                 request_timeout=120,
                 max_retries=5,
             )
@@ -238,7 +267,7 @@ class EmbedderService(BaseEmbedderService):
         self.embedding_generator = embedding_generator or BedrockEmbeddingGenerator()
         self.storage = storage or OpenSearchStorage()
 
-    def process(self, input_data: EmbedderInput) -> EmbedderOutput:
+    async def process(self, input_data: EmbedderInput) -> EmbedderOutput:
         """Process multiple chunks with embeddings and storage."""
         try:
             # Test connection first
@@ -257,7 +286,7 @@ class EmbedderService(BaseEmbedderService):
             texts = [chunk.content for chunk in chunks]
             logger.info(f'Đang tạo embedding cho {len(texts)} chunks...')
 
-            embeddings = self.embedding_generator.get_embedding_batch(texts)
+            embeddings = await self.embedding_generator.get_embedding_batch(texts)
 
             # Store in backend
             self.storage.bulk_index_chunks(chunks, embeddings)
