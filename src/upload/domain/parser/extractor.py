@@ -135,9 +135,11 @@ class ExtractorService:
 
     def __process_single_page(self, page_data: Tuple[int, bytes, UploadFile]) -> Tuple[int, str]:
         page_index, file_byte, file = page_data
-        file.file.seek(0)
         try:
-            with pdfplumber.open(file.file) as pdf:
+            with pdfplumber.open(BytesIO(file_byte)) as pdf:
+                if page_index >= len(pdf.pages):
+                    raise IndexError('Page index out of range')
+
                 page = pdf.pages[page_index]
                 filtered_page = page
                 chars = filtered_page.chars
@@ -175,7 +177,10 @@ class ExtractorService:
             file.file.seek(0)
             file_byte = file.file.read()
 
-            page_data_list = [(i, file_byte, file) for i in range(len(pdfplumber.open(file.file).pages))]
+            with pdfplumber.open(BytesIO(file_byte)) as pdf:
+                total_pages = len(pdf.pages)
+
+            page_data_list = [(i, file_byte, file) for i in range(total_pages)]
 
             results = {}
             with ThreadPoolExecutor(max_workers=4) as executor:
