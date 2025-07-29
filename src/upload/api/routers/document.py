@@ -12,10 +12,22 @@ from fastapi import Form
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import UploadFile
+from infra.db import Conversation
+from infra.db import Document
+from infra.db import SessionLocal
 from shared.settings import Settings
+from sqlalchemy.orm import Session
 
 router = APIRouter(tags=['documents'])
 settings = Settings()
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 def get_upload_application(request: Request) -> UploadDocumentApplication:
@@ -31,37 +43,35 @@ def get_upload_application(request: Request) -> UploadDocumentApplication:
 @router.post('/upload')
 def upload_documents(
     files: List[UploadFile],
+    user_id: str = Form(...),
     max_workers: Optional[int] = Form(None),
     application: UploadDocumentApplication = Depends(get_upload_application),
+    db: Session = Depends(get_db),
 ):
-    """Upload and process multiple documents with multi-worker support.
-
-    This endpoint accepts multiple file uploads and processes them through
-    the document application layer using concurrent workers when more than
-    one file is provided.
-
-    Args:
-        files (List[UploadFile]): List of files to be uploaded and processed
-        max_workers (Optional[int]): Maximum number of workers for concurrent processing.
-                                   Defaults to min(4, number_of_files) if not specified.
-        application (UploadDocumentApplication): Injected upload application instance
-
-    Returns:
-        dict: Processing results for all uploaded files with summary statistics
-    """
     if not files:
         raise HTTPException(status_code=400, detail='No files provided')
-
-    # Reset file pointers to beginning
     for file in files:
         file.file.seek(0)
+    # Generate a title (for now, just use the first file's name or a static string)
+    title = f"Conversation for {files[0].filename}" if files else 'Untitled Conversation'
 
-    # Use multi-worker processing
+    user_id_num = int(user_id)
+    # Create conversation with empty history
+    conversation = Conversation(user_id=user_id_num, title=title, history='[]')
+    db.add(conversation)
+    db.commit()
+    db.refresh(conversation)
+    # Create document records
+    for file in files:
+        doc = Document(conversation_id=conversation.id, name=file.filename, size=file.size)
+        db.add(doc)
+    db.commit()
+    # Use multi-worker processing as before
     upload_input = UploadMultipleDocumentsInput(files=files, max_workers=max_workers)
     result = application.upload_multiple_documents(upload_input)
-
-    # Format response
+    # Format response, include conversation_id
     return {
+        'conversation_id': conversation.id,
         'summary': {
             'total_files': result.total_files,
             'successful_files': result.successful_files,
@@ -166,3 +176,26 @@ async def delete_document(document_id: str):
         dict: Status message indicating successful deletion
     """
     return {'message': f'Document {document_id} deleted'}
+
+
+# get documents by conversation_id
+@router.get('/documents/{conversation_id}')
+def get_documents_by_conversation(conversation_id: int, db: Session = Depends(get_db)):
+    """Retrieve all documents associated with a specific conversation.
+
+    Args:
+        conversation_id (int): ID of the conversation to retrieve documents for
+        db (Session): Database session dependency
+
+    Returns:
+        List[Document]: List of documents associated with the conversation
+    """
+    documents = db.query(Document).filter(Document.conversation_id == conversation_id).all()
+    return [
+        {
+            'id': doc.id,
+            'name': doc.name,
+            'size': doc.size,
+        }
+        for doc in documents
+    ]

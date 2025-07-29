@@ -7,7 +7,7 @@ export interface Source {
 export interface ChatMessage {
   role: "user" | "assistant";
   message: string;
-  timestamp: Date;
+  timestamp?: Date;
   sources?: Source[];
 }
 

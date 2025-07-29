@@ -1,10 +1,10 @@
 export interface Document {
   id: string;
   name: string;
-  type: "pdf" | "docx" | "image" | "xlsx";
+  type?: "pdf" | "docx" | "image" | "xlsx";
   size: number;
-  uploadedAt: Date;
-  status: "processing" | "processed" | "error";
+  uploadedAt?: Date;
+  status?: "processing" | "processed" | "error";
   processingTime?: number;
   chunks?: number;
   embeddings?: number;
