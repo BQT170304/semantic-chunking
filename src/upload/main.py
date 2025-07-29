@@ -3,6 +3,8 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import uvicorn
+from api.routers import auth_router
+from api.routers import conversation_router
 from api.routers import document_router
 from domain.chunker import ChunkerService
 from domain.embedder import BedrockEmbeddingGenerator
@@ -51,6 +53,8 @@ app.add_middleware(
 )
 
 app.include_router(document_router)
+app.include_router(auth_router)
+app.include_router(conversation_router)
 
 
 @app.get('/')

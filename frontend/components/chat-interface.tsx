@@ -9,15 +9,20 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { Document } from "@/types/document";
 import type { ChatMessage, ChatResponse } from "@/types/message";
+import { LoadingState } from "@/components/loading-state";
 
 interface ChatInterfaceProps {
   documents: Document[];
+  conversationId: string;
+  onDocumentsUpdate?: (documents: Document[]) => void;
 }
 
-export function ChatInterface({ documents }: ChatInterfaceProps) {
+export function ChatInterface({ documents, conversationId, onDocumentsUpdate }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [conversationDocuments, setConversationDocuments] = useState<Document[]>(documents);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -28,9 +33,60 @@ export function ChatInterface({ documents }: ChatInterfaceProps) {
     scrollToBottom();
   }, [messages]);
 
+  // Fetch conversation data when conversationId changes
+  useEffect(() => {
+    if (!conversationId) return;
+
+    const fetchConversationData = async () => {
+      setLoadingMessages(true);
+      try {
+        // Fetch conversation details including documents and messages
+        const res = await fetch(`/api/conversation/${conversationId}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!res.ok) throw new Error("Failed to fetch conversation data");
+        const conversationData = await res.json();
+        console.log("Fetched conversation data:", conversationData);
+
+        // Update documents if they exist in conversation
+        if (conversationData.documents && conversationData.documents.length > 0) {
+          setConversationDocuments(conversationData.documents);
+          if (onDocumentsUpdate) {
+            onDocumentsUpdate(conversationData.documents);
+          }
+        } else {
+          setConversationDocuments(documents);
+        }
+
+        const conversationHistory_str = conversationData.history ? conversationData.history : "[]"; // Fallback to empty array if history is not present
+        const messagesData = JSON.parse(conversationHistory_str);
+        console.log("Parsed messages data:", messagesData);
+
+        const fetchMessagesData = messagesData.map(
+          (msg: { role: string; content: string }) =>
+            ({
+              role: msg.role,
+              message: msg.content,
+            } as ChatMessage)
+        );
+        // Update messages
+        setMessages(fetchMessagesData);
+      } catch (error) {
+        console.error("Error fetching conversation data:", error);
+        setConversationDocuments(documents);
+        setMessages([]);
+      } finally {
+        setLoadingMessages(false);
+      }
+    };
+
+    fetchConversationData();
+  }, [conversationId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || documents.length === 0) return;
+    if (!input.trim() || conversationDocuments.length === 0) return;
 
     const userMessage: ChatMessage = {
       role: "user",
@@ -38,13 +94,13 @@ export function ChatInterface({ documents }: ChatInterfaceProps) {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev: ChatMessage[]) => [...prev, userMessage]);
     const currentInput = input;
     setInput("");
     setIsLoading(true);
 
     try {
-      const chatHistory = messages.map((msg) => ({
+      const chatHistory = messages.map((msg: ChatMessage) => ({
         role: msg.role,
         content: msg.message,
       }));
@@ -63,12 +119,9 @@ export function ChatInterface({ documents }: ChatInterfaceProps) {
           message: currentInput,
           documents: documents.map((doc) => doc.name),
           chat_history: chatHistory,
+          conversation_id: conversationId,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
 
       const result: ChatResponse = await response.json();
 
@@ -79,18 +132,15 @@ export function ChatInterface({ documents }: ChatInterfaceProps) {
         sources: result.sources,
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages((prev: ChatMessage[]) => [...prev, assistantMessage]);
     } catch (error) {
       console.error("Chat error:", error);
-
-      // Add error message to chat
       const errorMessage: ChatMessage = {
         role: "assistant",
         message: "Sorry, I encountered an error while processing your request. Please try again.",
         timestamp: new Date(),
       };
-
-      setMessages((prev) => [...prev, errorMessage]);
+      setMessages((prev: ChatMessage[]) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -100,14 +150,18 @@ export function ChatInterface({ documents }: ChatInterfaceProps) {
     <Card className="flex flex-col h-[600px]">
       <div className="p-4 border-b border-gray-200">
         <h2 className="text-lg font-semibold text-gray-900">Chat</h2>
-        {documents.length === 0 && <p className="text-sm text-gray-500 mt-1">Upload documents to start chatting</p>}
+        {conversationDocuments.length === 0 && (
+          <p className="text-sm text-gray-500 mt-1">Upload documents to start chatting</p>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 ? (
+        {loadingMessages ? (
+          <LoadingState message="Loading conversation..." size="md" />
+        ) : messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-8">
             <Bot className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-            {documents.length > 0 ? (
+            {conversationDocuments.length > 0 ? (
               <>
                 <p>Start a conversation about your documents</p>
                 <p className="text-sm mt-2">Ask questions, request summaries, or explore insights</p>
@@ -196,13 +250,15 @@ export function ChatInterface({ documents }: ChatInterfaceProps) {
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={documents.length > 0 ? "Ask a question about your documents..." : "Upload documents first..."}
-            disabled={documents.length === 0 || isLoading}
+            placeholder={
+              conversationDocuments.length > 0 ? "Ask a question about your documents..." : "Upload documents first..."
+            }
+            disabled={conversationDocuments.length === 0 || isLoading}
             className="flex-1"
           />
           <Button
             type="submit"
-            disabled={!input.trim() || documents.length === 0 || isLoading}
+            disabled={!input.trim() || conversationDocuments.length === 0 || isLoading}
             className="bg-blue-600 hover:bg-blue-700">
             <Send className="h-4 w-4" />
           </Button>
