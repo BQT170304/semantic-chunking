@@ -75,7 +75,7 @@ class RAG:
                 }
 
             # Retrieve relevant documents
-            docs = self.retriever.get_relevant_documents(question, k=3, search_kwargs=search_kwargs)
+            docs = self.retriever.get_relevant_documents(question, k=10, search_kwargs=search_kwargs)
 
             # Extract context and sources
             context = ''

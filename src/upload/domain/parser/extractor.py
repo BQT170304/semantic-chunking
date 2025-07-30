@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+import threading
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import List
 from typing import Tuple
@@ -9,7 +12,6 @@ import cv2
 import docx
 import numpy as np
 import openpyxl
-import pandas as pd
 import pdfplumber
 import pytesseract
 from fastapi import UploadFile
@@ -18,8 +20,6 @@ from pdfplumber.utils import extract_text
 from pdfplumber.utils import get_bbox_overlap
 from pdfplumber.utils import obj_to_bbox
 from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageEnhance
 
 from .base import FileType
 
@@ -41,7 +41,7 @@ class ExtractorService:
         if file_type in extraction_methods:
             return extraction_methods[file_type](file)
         else:
-            raise ValueError(f"Unsupported file type: {file_type}")
+            raise ValueError(f'Unsupported file type: {file_type}')
 
     def get_file_type(self, file: UploadFile) -> FileType:
         """Determine file type based on filename and content type."""
@@ -94,11 +94,12 @@ class ExtractorService:
             # Handle images (stub)
             for rel in document.part.rels.values():
                 if 'image' in rel.target_ref:
-                    content.append(f"[IMAGE: {os.path.basename(rel.target_ref)}] (OCR not yet implemented)")
+                    image_content = self.__ocr_image(np.array(Image.open(BytesIO(rel.target_part.blob))))
+                    content.append(image_content)
 
             return '\n\n'.join(content)
         except Exception as e:
-            raise ValueError(f"Failed to extract text from DOCX file: {str(e)}")
+            raise ValueError(f'Failed to extract text from DOCX file: {str(e)}')
 
     def __docx_table_to_markdown(self, table) -> str:
         """Convert DOCX table to Markdown format."""
@@ -124,49 +125,87 @@ class ExtractorService:
 
         return '\n'.join([header, separator] + body_rows)
 
-    def __convert_pdf_to_images(self, file_byte: bytes) -> List[Image.Image]:
-        """Convert PDF file bytes to a list of PIL Image objects."""
+    def __convert_pdf_page_to_image(self, file_byte: bytes, page_number: int) -> np.ndarray:
+        """Convert PDF file bytes to a single PIL Image object."""
         try:
-            images = convert_from_bytes(file_byte)
-            return images
+            image = convert_from_bytes(pdf_file=file_byte, first_page=page_number, last_page=page_number, dpi=300, fmt='jpg')[0]
+            return np.array(image)
         except Exception as e:
-            raise ValueError(f"Failed to convert PDF to images: {str(e)}")
+            raise ValueError(f'Failed to convert PDF to images: {str(e)}')
+
+    def __process_single_page(self, page_data: Tuple[int, bytes, UploadFile]) -> Tuple[int, str]:
+        page_index, file_byte, file = page_data
+        try:
+            with pdfplumber.open(BytesIO(file_byte)) as pdf:
+                if page_index >= len(pdf.pages):
+                    raise IndexError('Page index out of range')
+
+                page = pdf.pages[page_index]
+                filtered_page = page
+                chars = filtered_page.chars
+
+                for table in page.find_tables():
+                    table_chars = page.crop(table.bbox).chars
+                    if not table_chars:
+                        continue
+                    first_table_char = table_chars[0]
+                    filtered_page = filtered_page.filter(
+                        lambda obj: get_bbox_overlap(obj_to_bbox(obj), table.bbox) is None,
+                    )
+                    chars = filtered_page.chars
+                    markdown = self.__table_to_markdown(table.extract())
+                    chars.append(first_table_char | {'text': markdown})
+
+                page_text = extract_text(chars, layout=True)
+
+                if not page_text:
+                    page_text = ''
+                    image = self.__convert_pdf_page_to_image(file_byte, page_index + 1)
+                    ocr_text = self.__ocr_image(image)
+                    if ocr_text:
+                        page_text += ocr_text + '\n'
+
+            return (page_index, page_text)
+
+        except Exception as e:
+            print(f'Lỗi xử lý trang {page_index + 1}: {str(e)}')
+            return (page_index, '')
 
     def extract_pdf(self, file: UploadFile) -> str:
         """Extract from a PDF file."""
         try:
             file.file.seek(0)
             file_byte = file.file.read()
-            with pdfplumber.open(file.file) as pdf:
-                content = []
 
-                for i, page in enumerate(pdf.pages):
-                    filtered_page = page
-                    chars = filtered_page.chars
-                    for table in page.find_tables():
-                        first_table_char = page.crop(table.bbox).chars[0]
-                        filtered_page = filtered_page.filter(
-                            lambda obj:
-                                get_bbox_overlap(obj_to_bbox(obj), table.bbox) is None,
-                        )
-                        chars = filtered_page.chars
-                        markdown = self.__table_to_markdown(table.extract())
-                        chars.append(first_table_char | {'text': markdown})
+            with pdfplumber.open(BytesIO(file_byte)) as pdf:
+                total_pages = len(pdf.pages)
 
-                    page_text = extract_text(chars, layout=True)
+            page_data_list = [(i, file_byte, file) for i in range(total_pages)]
 
-                    if not page_text:
-                        page_text = ''
-                        images = self.__convert_pdf_to_images(file_byte)
-                        if images:
-                            for img in images:
-                                page_text += self.__ocr_image(img) + '\n'
+            results = {}
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                future_to_index = {
+                    executor.submit(self.__process_single_page, page_data): page_data[0]
+                    for page_data in page_data_list
+                }
 
-                    content.append(page_text)
+                for future in as_completed(future_to_index):
+                    try:
+                        page_index, page_text = future.result()
+                        results[page_index] = page_text.strip()
+                    except Exception as e:
+                        page_index = future_to_index[future]
+                        print(f'Lỗi xử lý trang {page_index + 1}: {str(e)}')
+                        results[page_index] = ''
 
-                return '\n'.join(content)
+            content = []
+            for i in sorted(results.keys()):
+                content.append(results[i])
+
+            return '\n'.join(content)
+
         except Exception as e:
-            raise ValueError(f"Failed to extract text from PDF file: {str(e)}")
+            raise ValueError(f'Failed to extract text from PDF file: {str(e)}')
 
     def __table_to_markdown(self, table: List[List[str]]) -> str:
         """Convert table to Markdown format."""
@@ -199,138 +238,170 @@ class ExtractorService:
 
         return '\n'.join([header, separator] + body_rows)
 
-    def __preprocess_image(self, image: np.ndarray) -> np.ndarray:
-        """
-        Preprocess the image to improve OCR accuracy.
-        """
-        # Convert to grayscale
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-        # Apply thresholding to preprocess the image
-        thresh = cv2.threshold(
-            gray, 0, 255, cv2.THRESH_BINARY
-            | cv2.THRESH_OTSU,
-        )[1]
-
-        # Apply dilation to merge letters
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-        dilate = cv2.dilate(thresh, kernel, iterations=1)
-
-        return dilate
-
-    def __detect_table_borders(self, preprocessed: np.ndarray):
-        # Detect table borders in the preprocessed image.
-        horiz_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
-        vert_kernel  = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 40))
-
-        horizontal = cv2.erode(preprocessed, horiz_kernel, iterations=1)
-        horizontal = cv2.dilate(horizontal, horiz_kernel, iterations=2)
-
-        vertical = cv2.erode(preprocessed, vert_kernel, iterations=1)
-        vertical = cv2.dilate(vertical, vert_kernel, iterations=2)
-
-        table_mask = cv2.add(horizontal, vertical)
-
-        # Find contours of the table borders
-        contours, _ = cv2.findContours(
-            table_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE,
-        )
-        bboxes = [cv2.boundingRect(c) for c in contours]
-
-        return bboxes
-
-    def __ocr_image(self, image: Image) -> str:
+    def __ocr_image(self, image: np.ndarray) -> str:
         try:
-            np_img = np.array(image)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-            preprocessed = self.__preprocess_image(np_img)
+            # Làm mờ để giảm nhiễu
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            # Áp dụng adaptive threshold để tạo ảnh nhị phân
+            thresh = cv2.adaptiveThreshold(
+                blurred, 255,
+                cv2.ADAPTIVE_THRESH_MEAN_C,
+                cv2.THRESH_BINARY_INV,
+                15, 4,
+            )
 
-            table_bboxes = self.__detect_table_borders(preprocessed)
+            # Tìm các đường thẳng dọc và ngang
+            kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (30, 1))
+            kernel_v = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 30))
 
-            tables_markdown = []
+            detect_h = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel_h, iterations=2)
+            detect_v = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel_v, iterations=2)
 
-            for bbox in table_bboxes:
-                x, y, w, h = bbox
-                table_crop = image.crop((x, y, x + w, y + h))
+            # Kết hợp cả hai để tạo mask bảng
+            table_mask = cv2.add(detect_h, detect_v)
 
-                custom_config = r'--oem 3 --psm 6 -l vie'
-                table_text = pytesseract.image_to_string(table_crop, config=custom_config)
-                table_text = table_text.strip()
+            # Tìm contours từ mask bảng
+            contours, _ = cv2.findContours(table_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                # If Vietnamese fails, try English only
-                if not table_text:
-                    custom_config = r'--oem 3 --psm 6 -l eng'
-                    table_text = pytesseract.image_to_string(table_crop, config=custom_config)
-                    table_text = table_text.strip()
+            # Cắt bảng và phủ trắng + placeholder
+            table_images: list[np.ndarray] = []
+            for i, cnt in enumerate(contours):
+                x, y, w, h = cv2.boundingRect(cnt)
+                if w > 100 and h > 100:
+                    table = image[y:y + h, x:x + w].copy()
+                    table_images.insert(0, table)
 
-                rows = [row.strip().split() for row in table_text.strip().split('\n') if row.strip()]
-                markdown = self.__table_to_markdown(rows)
-                tables_markdown.append(markdown)
+                    # Tạo placeholder
+                    cv2.rectangle(image, (x, y), (x + w, y + h), (255, 255, 255), thickness=-1)
 
-            mask = Image.new('L', image.size, 255)
-            draw = ImageDraw.Draw(mask)
-            for x, y, w, h in table_bboxes:
-                draw.rectangle([x, y, x + w, y + h], fill=0)
-            text_only_image = Image.composite(image, Image.new('RGB', image.size, (255, 255, 255)), mask)
+                    text = 'table here'
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    font_scale = 1
+                    thickness = 2
+                    text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
+                    text_x = x + (w - text_size[0]) // 2
+                    text_y = y + (h + text_size[1]) // 2
+                    cv2.putText(image, text, (text_x, text_y), font, font_scale, (0, 0, 0), thickness)
 
             custom_config = r'--oem 3 --psm 6 -l vie'
-            text_content = pytesseract.image_to_string(text_only_image, config=custom_config)
-            text_content = table_text.strip()
+            page_content = pytesseract.image_to_string(image, config=custom_config)
 
             # If Vietnamese fails, try English only
-            if not text_content:
+            if not page_content:
                 custom_config = r'--oem 3 --psm 6 -l eng'
-                text_content = pytesseract.image_to_string(text_only_image, config=custom_config)
-                text_content = table_text.strip()
+                page_content = pytesseract.image_to_string(image, config=custom_config)
 
-            text_blocks = []
+            table_contents = []
+            for table_image in table_images:
+                cells = self.__extract_cells_from_table(table_image)
+                table_data = []
+                for row in cells:
+                    row_data = []
+                    for cell in row:
+                        cell_content = pytesseract.image_to_string(cell, config=custom_config)
+                        # Cho phép xuống dòng trong ô:
+                        cell_content = cell_content.replace('\n', '<br>')
+                        row_data.append(cell_content)
+                    table_data.append(row_data)
 
-            if text_content.strip():
-                text_blocks.append((0, text_content.strip()))
+                markdown = self.__table_to_markdown(table_data)
+                table_contents.append(markdown)
 
-            for md, bbox in zip(tables_markdown, table_bboxes):
-                y = bbox[1]
-                if md.strip():
-                    text_blocks.append((y, md.strip()))
+            for content in table_contents:
+                page_content = page_content.replace('table here', content, 1)
 
-            text_blocks.sort(key=lambda x: x[0])
-
-            final_content = '\n\n'.join([block[1] for block in text_blocks])
-            return final_content
+            return page_content
 
         except Exception as e:
-            raise ValueError(f"Failed to extract text from image: {str(e)}")
+            raise ValueError(f'Failed to extract text from image: {str(e)}')
+
+    def __extract_cells_from_table(self, table_image: np.ndarray):
+        gray = cv2.cvtColor(table_image, cv2.COLOR_BGR2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        contrast = clahe.apply(gray)
+        blur = cv2.GaussianBlur(contrast, (3, 3), 0)
+
+        # Phát hiện đường kẻ bằng adaptive threshold
+        thresh = cv2.adaptiveThreshold(
+            blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+            cv2.THRESH_BINARY_INV, 15, 4,
+        )
+
+        # Dilation để nối border kép thành một khối
+        dilated = cv2.dilate(thresh, np.ones((3, 3), np.uint8), iterations=1)
+
+        # Phát hiện các đường kẻ dọc và ngang
+        scale = 20
+        h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (table_image.shape[1] // scale, 1))
+        v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, table_image.shape[0] // scale))
+
+        detect_h = cv2.morphologyEx(dilated, cv2.MORPH_OPEN, h_kernel, iterations=2)
+        detect_v = cv2.morphologyEx(dilated, cv2.MORPH_OPEN, v_kernel, iterations=2)
+
+        # Kết hợp để tạo mặt nạ bảng
+        grid_mask = cv2.add(detect_h, detect_v)
+        merged_mask = cv2.dilate(grid_mask, np.ones((3, 3), np.uint8), iterations=1)
+
+        # Tìm contour của ô
+        contours, _ = cv2.findContours(merged_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        cell_coords = []
+        for cnt in contours:
+            x, y, w, h = cv2.boundingRect(cnt)
+            if w > 20 and h > 20:  # lọc nhiễu nhỏ
+                cell_coords.append((x, y, w, h))
+
+        img_h, img_w = table_image.shape[:2]
+
+        for cnt in contours:
+            x, y, w, h = cv2.boundingRect(cnt)
+            area = w * h
+            if area > 0.9 * img_h * img_w:
+                cell_coords.remove((x, y, w, h))
+
+        # Sắp xếp theo y trước, x sau
+        cell_coords = sorted(cell_coords, key=lambda b: (b[1], b[0]))
+
+        # Gom các ô thành từng hàng
+        rows = []
+        current_row: list[tuple[int, int, int, int]] = []
+        last_y = -100
+        tolerance_y = 20
+
+        for bbox in cell_coords:
+            x, y, w, h = bbox
+            if abs(y - last_y) > tolerance_y:
+                if current_row:
+                    rows.append(current_row)
+                current_row = [bbox]
+                last_y = y
+            else:
+                current_row.append(bbox)
+        if current_row:
+            rows.append(current_row)
+
+        # Sắp xếp các ô trong từng hàng theo x
+        cells = []
+        for row in rows:
+            row_sorted = sorted(row, key=lambda b: b[0])
+            row_imgs = [table_image[y:y + h, x:x + w] for (x, y, w, h) in row_sorted]
+            cells.append(row_imgs)
+
+        return cells
 
     def extract_image(self, file: UploadFile) -> str:
         """Extract from an image file using OCR."""
         try:
             file.file.seek(0)
-            image = Image.open(file.file)
+            image = np.array(Image.open(file.file))
 
             content = self.__ocr_image(image)
-
-            # Enhance contrast
-            enhancer = ImageEnhance.Contrast(image)
-            image = enhancer.enhance(1.2)
-
-            # Enhance sharpness
-            enhancer = ImageEnhance.Sharpness(image)
-            image = enhancer.enhance(1.1)
-
-            custom_config = r'--oem 3 --psm 6 -l vie'
-            content = pytesseract.image_to_string(image, config=custom_config)
-            content = content.strip()
-
-            # If Vietnamese fails, try English only
-            if not content or len(content) < 5:
-                custom_config = r'--oem 3 --psm 6 -l eng'
-                content = pytesseract.image_to_string(image, config=custom_config)
-                content = content.strip()
-
             return content
 
         except Exception as e:
-            raise ValueError(f"Failed to extract text from image file: {str(e)}")
+            raise ValueError(f'Failed to extract text from image file: {str(e)}')
 
     def extract_xlsx(self, file: UploadFile) -> str:
         """Extract raw text from an XLSX file and convert tables to Markdown."""
@@ -343,7 +414,7 @@ class ExtractorService:
                 sheet = workbook[sheet_name]
 
                 # Add sheet name as header
-                content.append(f"## Sheet: {sheet_name}")
+                content.append(f'## Sheet: {sheet_name}')
 
                 # Find the actual data range
                 max_row = 0
@@ -377,4 +448,4 @@ class ExtractorService:
 
             return '\n\n'.join(content)
         except Exception as e:
-            raise ValueError(f"Failed to extract text from XLSX file: {str(e)}")
+            raise ValueError(f'Failed to extract text from XLSX file: {str(e)}')

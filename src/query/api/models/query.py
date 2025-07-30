@@ -8,8 +8,9 @@ from pydantic import BaseModel
 
 class ChatRequest(BaseModel):
     message: str
-    documents: Optional[List[str]] = None
-    chat_history: Optional[List[dict]] = None  # Each dict: {'role': 'user'|'assistant', 'content': str}
+    chat_history: Optional[list[dict]] = None
+    documents: Optional[list[str]] = None
+    conversation_id: Optional[int] = None
 
 
 class ChatResponse(BaseModel):

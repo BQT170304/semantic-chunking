@@ -38,7 +38,7 @@ class NovaMarkdownGenerator:
             model_id=self.model_id,
         )
 
-    def generate(self, raw_text: str) -> str:
+    async def generate(self, raw_text: str) -> str:
         prompt = build_markdown_prompt(raw_text)
         logger.info('Generating markdown', model_id=self.model_id, input_length=len(raw_text))
 

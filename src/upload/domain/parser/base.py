@@ -35,6 +35,6 @@ class BaseParserService(ABC):
     """Abstract base class for parsers."""
 
     @abstractmethod
-    def process(self, input_data: ParserInput) -> ParserOutput:
+    async def process(self, input_data: ParserInput) -> ParserOutput:
         """Parse the input file and extract text content."""
         raise NotImplementedError()
