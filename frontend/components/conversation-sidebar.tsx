@@ -20,6 +20,7 @@ interface ConversationSidebarProps {
   onToggleCollapse: () => void;
   userId: string;
   handleCreate: () => void;
+  reloadTrigger?: number; // Add trigger for external reload
 }
 
 const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
@@ -29,6 +30,7 @@ const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   onToggleCollapse,
   userId,
   handleCreate,
+  reloadTrigger,
 }: ConversationSidebarProps) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +58,13 @@ const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   useEffect(() => {
     fetchConversations();
   }, []);
+
+  // Listen for external reload trigger
+  useEffect(() => {
+    if (reloadTrigger) {
+      fetchConversations();
+    }
+  }, [reloadTrigger]);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "";

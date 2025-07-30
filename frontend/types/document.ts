@@ -32,6 +32,7 @@ export interface UploadResponse {
   };
   results: UploadResult[];
   errors: string[];
+  conversation_id: string;
 }
 
 export interface UploadProgress {

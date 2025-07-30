@@ -15,6 +15,7 @@ export default function Home() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [showUpload, setShowUpload] = useState(true);
+  const [reloadTrigger, setReloadTrigger] = useState<number>(0);
 
   useEffect(() => {
     const userInfo = typeof window !== "undefined" ? localStorage.getItem("user_info") : null;
@@ -54,6 +55,15 @@ export default function Home() {
     setShowUpload(true);
   };
 
+  const handleConversationCreated = (conversationId: string) => {
+    setSelectedConversationId(conversationId);
+    setShowUpload(false);
+  };
+
+  const handleReloadConversations = () => {
+    setReloadTrigger((prev) => prev + 1);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="flex h-screen">
@@ -65,6 +75,7 @@ export default function Home() {
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           userId={user.id.toString()}
+          reloadTrigger={reloadTrigger}
         />
 
         {/* Main Content */}
@@ -106,6 +117,8 @@ export default function Home() {
                     onCancel={handleUploadCancel}
                     isUploading={isUploading}
                     setIsUploading={setIsUploading}
+                    onConversationCreated={handleConversationCreated}
+                    onReloadConversations={handleReloadConversations}
                   />
                 )}
                 {/* Right Panel - Chat Interface */}

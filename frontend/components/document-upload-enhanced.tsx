@@ -31,6 +31,8 @@ interface DocumentUploadEnhancedProps {
   isUploading: boolean;
   setIsUploading: (uploading: boolean) => void;
   userId: string;
+  onConversationCreated?: (conversationId: string) => void;
+  onReloadConversations?: () => void;
 }
 
 export function DocumentUploadEnhanced({
@@ -39,6 +41,8 @@ export function DocumentUploadEnhanced({
   isUploading,
   setIsUploading,
   userId,
+  onConversationCreated,
+  onReloadConversations,
 }: DocumentUploadEnhancedProps) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
@@ -182,6 +186,12 @@ export function DocumentUploadEnhanced({
           setTimeout(() => {
             setUploadSuccess(null);
           }, 8000);
+
+          // Call callbacks after successful upload
+          if (apiResponse.conversation_id) {
+            onConversationCreated?.(apiResponse.conversation_id);
+          }
+          onReloadConversations?.();
         }
 
         // Update parent component with successful uploads
